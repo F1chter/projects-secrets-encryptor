@@ -1,0 +1,63 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ============================================
+# CONFIGURATION - Edit these values
+# ============================================
+PROJECT_NAME="my-project"
+FILE_TO_ENCRYPT="secrets.yml"
+# ============================================
+
+if [[ -z "${PROJECTS_CONFIG_HOME:-}" ]]; then
+    echo "ERROR: PROJECTS_CONFIG_HOME is not set. Run: source ~/.bashrc" >&2
+    exit 1
+fi
+
+CONFIG_FILE="${PROJECTS_CONFIG_HOME}/config.yaml"
+
+if [[ ! -f "${CONFIG_FILE}" ]]; then
+    echo "ERROR: config.yaml not found at ${CONFIG_FILE}" >&2
+    exit 1
+fi
+
+VAULT_PASSWORD=$(grep '^vault_password:' "${CONFIG_FILE}" | sed 's/^vault_password:\s*"\?\(.*\)"\?\s*$/\1/')
+
+if [[ -z "${VAULT_PASSWORD}" || "${VAULT_PASSWORD}" == "CHANGE_ME" ]]; then
+    echo "ERROR: Set a real vault password in ${CONFIG_FILE}" >&2
+    exit 1
+fi
+
+if [[ ! -f "${FILE_TO_ENCRYPT}" ]]; then
+    echo "ERROR: File to encrypt not found: ${FILE_TO_ENCRYPT}" >&2
+    exit 1
+fi
+
+TARGET_DIR="${PROJECTS_CONFIG_HOME}/${PROJECT_NAME}"
+mkdir -p "${TARGET_DIR}"
+
+ENCRYPTED_NAME="$(basename "${FILE_TO_ENCRYPT}").vault"
+TARGET_FILE="${TARGET_DIR}/${ENCRYPTED_NAME}"
+
+cp "${FILE_TO_ENCRYPT}" "${TARGET_FILE}"
+
+VAULT_PASS_FILE=$(mktemp)
+echo "${VAULT_PASSWORD}" > "${VAULT_PASS_FILE}"
+chmod 600 "${VAULT_PASS_FILE}"
+
+python3 -c "
+import subprocess, sys
+result = subprocess.run(
+    ['ansible-vault', 'encrypt', '--vault-password-file', sys.argv[1], sys.argv[2]],
+    stdin=subprocess.DEVNULL,
+    capture_output=True,
+    text=True
+)
+if result.returncode != 0:
+    print(result.stderr, file=sys.stderr)
+    sys.exit(result.returncode)
+print(result.stdout, end='')
+" "${VAULT_PASS_FILE}" "${TARGET_FILE}"
+
+rm -f "${VAULT_PASS_FILE}"
+
+echo "Encrypted file created: ${TARGET_FILE}"
