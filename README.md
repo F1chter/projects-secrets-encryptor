@@ -1,5 +1,5 @@
 # projects-config
-A private repository with project's config
+Used for storing encrypted secrets in separate folder(private repo)
 
 ## Installing OpenSSL
 
