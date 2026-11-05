@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# PROJECT_NAME - change this to your project name
+PROJECT_NAME="example-project"
+
+# Files to encrypt (space-separated, relative to current folder)
+ENCRYPT_FILES=("config.yml" "secrets.cfg")
+
+# Resolve PROJECTS_CONFIG_HOME (defaults to the folder this script lives in)
+if [[ -z "${PROJECTS_CONFIG_HOME:-}" ]]; then
+  SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  PROJECTS_CONFIG_HOME="$SCRIPT_DIR"
+fi
+
+CONFIG_FILE="$PROJECTS_CONFIG_HOME/openssl.config"
+ENC_DIR="$PROJECTS_CONFIG_HOME/$PROJECT_NAME"
+
+# Extract password from the [CA_default] section of openssl.config
+get_password() {
+  awk -F'=' '
+    /^\[CA_default\]/ { found=1 }
+    found && /^[[:space:]]*password[[:space:]]*=/ {
+      sub(/^[[:space:]]*password[[:space:]]*=[[:space:]]*/, "")
+      sub(/[[:space:]]*$/, "")
+      print
+      exit
+    }
+  ' "$CONFIG_FILE"
+}
+
+PASSWORD="$(get_password)"
+
+if [[ -z "$PASSWORD" || "$PASSWORD" == "PLACEHOLDER_PASSWORD" ]]; then
+  echo "Error: Set a real password in $CONFIG_FILE" >&2
+  exit 1
+fi
+
+if [[ ! -f "$CONFIG_FILE" ]]; then
+  echo "Error: $CONFIG_FILE not found (run install.sh first)." >&2
+  exit 1
+fi
+
+case "${1:-}" in
+  -encrypt)
+    mkdir -p "$ENC_DIR"
+    for f in "${ENCRYPT_FILES[@]}"; do
+      src="$(pwd)/$f"
+      [[ -f "$src" ]] || { echo "Warning: $src not found, skipping." >&2; continue; }
+      base="$(basename "$f")"
+      openssl enc -aes-256-cbc -salt -pbkdf2 \
+        -in "$src" -out "$ENC_DIR/$base.enc" -pass pass:"$PASSWORD"
+      echo "Encrypted $f -> $ENC_DIR/$base.enc"
+    done
+    ;;
+  -decrypt)
+    shopt -s nullglob
+    for f in "$ENC_DIR"/*.enc; do
+      [[ -f "$f" ]] || continue
+      base="$(basename "$f" .enc)"
+      echo "--- decrypted $base ---"
+      openssl enc -d -aes-256-cbc -salt -pbkdf2 \
+        -in "$f" -pass pass:"$PASSWORD"
+      echo ""
+    done
+    shopt -u nullglob
+    ;;
+  *)
+    echo "Usage: $0 [-encrypt|-decrypt]" >&2
+    exit 1
+    ;;
+esac
