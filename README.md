@@ -1,5 +1,7 @@
-# projects-config
+# projects-secrets-encryptor
 Used for storing encrypted secrets in separate folder(private repo)
+
+Project use openssl to encrypt defined files with secrets, and put this files to this folder in subfolder with project name. Decrypt not replace your file, just print it to console to avoid overwriting uncommited non-encrypted file. 
 
 ## Installing OpenSSL
 
@@ -71,10 +73,10 @@ Edit `openssl.config` and replace `PLACEHOLDER_PASSWORD` with a real password.
 
 ### 2. Use project-config.sh.example
 
-Copy it to `project-config.sh` and edit the top variables:
+Copy it to `your-project-with-secret-folder` and edit the top variables:
 
 - `PROJECT_NAME` — your project name
-- `ENCRYPT_FILES` — files (relative to current folder) to encrypt
+- `ENCRYPT_FILES` — files (relative to `your-project-with-secret-folder`) to encrypt
 
 Encrypt config files into `$PROJECTS_CONFIG_HOME/$PROJECT_NAME/`:
 
